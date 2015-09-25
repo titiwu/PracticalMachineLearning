@@ -1,22 +1,157 @@
 ---
 title: "Practical Machine Learning Course Project"
 author: "Matthias Busl"
-date: "18. September 2015"
+date: "25. September 2015"
 output: html_document
 ---
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r}
-summary(cars)
-```
-
-You can also embed plots, for example:
 
 ```{r, echo=FALSE}
-plot(cars)
+rm(list = ls())
+library(lattice)
+library(ggplot2)
+library(caret)
+set.seed(112)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Question
+The question behind the dataset and course project can be formulated as:
+
+Can a three sensor on body measurement be used to categorize the way an defined exercise (Unilateral Dumbbell Biceps Curl) was made into five classes consisting of the "right way" and four common mistakes?
+
+## Input data and feature extraction
+The input data used comes from three sensors from a person doing a certain exercise. 
+The feature extraction already was made in the data (averages etc).
+
+### Treating non-numerical data
+However a first look into the data shows missing features for a lot of datasets plus some errors that occured at the level of feature creation ("DIV/0").
+So the data was read in and the missing and not correctly calculated values treated as "not available" directly at that stage. 
+```{r}
+raw_data <- read.table("pml-training.csv", header=TRUE, sep = ",", na.strings=c("", "NA", "#DIV/0!")) 
+```
+Also the first colums only contain data that is only used in order to identfy the dataset (username, timestamp); it contains no information about how the exercise was done and is therefore not selected.
+Also the "num_window" variable ist one of those identifying only the fact that the same execution class of the exercise was repeated it contains no information on *how* the exercise was done.
+
+A look at the number of not available data for each column shows that there are many rows (actually 100 out of 153) that only values for very few datasets. So instead of estimating missing values the only reasonable way to treat these features is to delete them entirely. 
+After that procedure all "NA"s are gone.
+```{r}
+pml_data <- subset(raw_data, select = roll_belt:classe)
+columns_to_drop <- which(colSums(is.na(pml_data)) > nrow(pml_data)*0.75)
+pml_data <- pml_data[, -columns_to_drop]
+```
+
+### Properties of the resulting data
+A quick check shows that the resulting data contains no zero  or near zero variance predictors.
+```{r}
+nzv <- nearZeroVar(pml_data, saveMetrics= TRUE)
+sum(nzv$nzv == TRUE)
+```
+So there is no need for removing further colums.
+
+Another check is to find correlating features:
+```{r}
+descrCor <- abs(cor(pml_data[,-c(ncol(pml_data))]))
+diag(descrCor) <- 0
+which(descrCor > 0.95,arr.ind=T)
+```
+This shows that we have ten variables that have strong correlations to another variable and could be represented by only three.
+That would favour a PCA in later steps.
+
+### Data splitting
+Since there is only one dataset available I chose to split that "training" dataset into a training part for the algorithm and a test set in order to being able to evaluate the out of sample error of an algorithm more realistic. Since computing time and memory was a concern at the first tries with the suggested 60%/40% split, I used only 30% for the training set.
+```{r}
+inTrain <- createDataPartition(y=pml_data$classe,
+                              p=0.3, list=FALSE)
+training <- pml_data[inTrain,]
+testing <- pml_data[-inTrain,]
+```
+This leads to `r nrow(training)` training and `r nrow(testing)` testing datasets.
+
+## Algorithm
+First the importance of the features is evaluated using a simple random forest scan:
+```{r, message=FALSE}
+library(randomForest)
+test_model <- randomForest(classe~., data=training, importance=TRUE, ntree=100)
+varImpPlot(test_model)
+```
+
+A look at some plots of the training data show no simple linear relation. Here the three most important features are plotted against each other with the dots being colored by the "classe" variable. 
+```{r, echo=FALSE}
+featurePlot(x=training[,c("roll_belt","pitch_forearm","magnet_dumbbell_z")],
+            y = training$classe,
+            plot="pairs")
+```
+
+Interestingly a density plot shows mostly gaussian looking distributions (here shown for an example feature).
+```{r, echo=FALSE}
+qplot(roll_belt,colour=classe,data=pml_data, geom="density")
+```
+
+This leads to the selection of three different algorithms that are suitable for nonlinear problems and will be tested:
+
+* Boosting
+* Random Forest
+* Model based (Naive Bayes)
+
+## Parameters
+The standard train parameters in the caret package all apear very reasonable. 
+So I saw no intention to change them.
+Only PCA as preprocessing option is tried as some strong correlations have been seen in the data.
+For the random forest algorithms the number of cross-foldings were restricted to 5 in order to be able to compute the model on my machine.
+
+## Evaluation 
+Four models are created and tested on the test set in order to geta good estimate for the out of sample error.
+
+### Boosting
+```{r, message=FALSE}
+gbm_model <- train(classe ~ ., data=training,method="gbm", verbose=FALSE)
+```
+```{r}
+confusionMatrix(testing$classe,predict(gbm_model,testing))
+```
+This algorithm gives an accuracy of about 95% which is already not bad.
+
+### Naive Bayes
+```{r, message=FALSE, warning=FALSE}
+nb_model <- train(classe ~ ., data=training,method="nb", verbose=FALSE)
+```
+```{r, message=FALSE, warning=FALSE}
+confusionMatrix(testing$classe,predict(nb_model,testing))
+```
+Even though the data looked gaussian distributed, wich led to the use of this algorithm, the performance is  bad, giving only 72 % accuracy. Maybe this is because the data peaks are quite equally centered as seen in the density plot above.
+
+### Random forest
+As suggested in the lecture cross validation is used.
+```{r, message=FALSE, warning=FALSE}
+rf_model<-train(classe ~ .,data=training,method="rf",
+                trControl=trainControl(method="cv",number=5),
+                allowParallel=TRUE)
+```
+```{r}
+confusionMatrix(testing$classe,predict(rf_model,testing))
+```
+
+Since this is the best estimate so far, a pca preprocessing is aplied with the standard threshold to see the impact on the performance
+```{r, message=FALSE, warning=FALSE}
+rf_model_pca<-train(classe ~ .,data=training,method="rf", preProcess="pca",
+                trControl=trainControl(method="cv",number=10),
+                allowParallel=TRUE)
+confusionMatrix(testing$classe,predict(rf_model,testing))
+```
+As it can be seen, the pca preprocessing leads to nearly the same performance.
+
+## Applying to the project test data set
+
+The data is treated in the same manner as the training data.
+```{r, message=FALSE, warning=FALSE}
+raw_test_data <- read.table("pml-testing.csv", header=TRUE, sep = ",", na.strings=c("", "NA", "#DIV/0!"))
+test_data <- subset(raw_test_data, select = roll_belt:problem_id)
+test_data <- test_data[, -columns_to_drop]
+```
+The algorithms are now applied to the 20 test cases.
+```{r, message=FALSE, warning=FALSE}
+predict(gbm_model,test_data)
+predict(nb_model,test_data)
+predict(rf_model,test_data)
+```
+The random forest and boosting predictions are the same and they also show a good accuracy on the out of sample testing set, so their result is submitted.
