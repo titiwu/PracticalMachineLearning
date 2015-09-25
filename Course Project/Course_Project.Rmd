@@ -67,6 +67,8 @@ testing <- pml_data[-inTrain,]
 ```
 This leads to `r nrow(training)` training and `r nrow(testing)` testing datasets.
 
+With this partition the cross validation is the testing set which is quite large and should therefore give a good estimate for the out of sample error.
+
 ## Algorithm
 First the importance of the features is evaluated using a simple random forest scan:
 ```{r, message=FALSE}
@@ -109,7 +111,9 @@ gbm_model <- train(classe ~ ., data=training,method="gbm", verbose=FALSE)
 ```{r}
 confusionMatrix(testing$classe,predict(gbm_model,testing))
 ```
-This algorithm gives an accuracy of about 95% which is already not bad.
+This algorithm gives an accuracy of about 95% which is already not bad. 
+
+This gives an first estimate for the out of sample error of approximately 5%.
 
 ### Naive Bayes
 ```{r, message=FALSE, warning=FALSE}
@@ -119,6 +123,8 @@ nb_model <- train(classe ~ ., data=training,method="nb", verbose=FALSE)
 confusionMatrix(testing$classe,predict(nb_model,testing))
 ```
 Even though the data looked gaussian distributed, wich led to the use of this algorithm, the performance is  bad, giving only 72 % accuracy. Maybe this is because the data peaks are quite equally centered as seen in the density plot above.
+
+The out of sample error ist therefore estimated to be 28 percent.
 
 ### Random forest
 As suggested in the lecture cross validation is used.
@@ -139,6 +145,65 @@ rf_model_pca<-train(classe ~ .,data=training,method="rf", preProcess="pca",
 confusionMatrix(testing$classe,predict(rf_model,testing))
 ```
 As it can be seen, the pca preprocessing leads to nearly the same performance.
+
+For both cases an out of sample error of 2% can be estimated.
+
+## Cross validation
+Repeating the steps (randomly subsampling a data partition and performing training and evaluation) is only done for the best algorithm (random forest without pca).
+
+### Round 2
+```{r}
+set.seed(234)
+inTrain <- createDataPartition(y=pml_data$classe,
+                              p=0.3, list=FALSE)
+training <- pml_data[inTrain,]
+testing <- pml_data[-inTrain,]
+```
+```{r, message=FALSE, warning=FALSE}
+rf_model<-train(classe ~ .,data=training,method="rf",
+                trControl=trainControl(method="cv",number=5),
+                allowParallel=TRUE)
+```
+```{r}
+confusionMatrix(testing$classe,predict(rf_model,testing))
+```
+
+### Round 3
+```{r}
+set.seed(456)
+inTrain <- createDataPartition(y=pml_data$classe,
+                              p=0.3, list=FALSE)
+training <- pml_data[inTrain,]
+testing <- pml_data[-inTrain,]
+```
+```{r, message=FALSE, warning=FALSE}
+rf_model<-train(classe ~ .,data=training,method="rf",
+                trControl=trainControl(method="cv",number=5),
+                allowParallel=TRUE)
+```
+```{r}
+confusionMatrix(testing$classe,predict(rf_model,testing))
+```
+
+### Round 4
+```{r}
+set.seed(567)
+inTrain <- createDataPartition(y=pml_data$classe,
+                              p=0.3, list=FALSE)
+training <- pml_data[inTrain,]
+testing <- pml_data[-inTrain,]
+```
+```{r, message=FALSE, warning=FALSE}
+rf_model<-train(classe ~ .,data=training,method="rf",
+                trControl=trainControl(method="cv",number=5),
+                allowParallel=TRUE)
+```
+```{r}
+confusionMatrix(testing$classe,predict(rf_model,testing))
+```
+
+### Conclusion
+Since the outcome is nearly the same, the out of sample error is estimated to be 2%.
 
 ## Applying to the project test data set
 

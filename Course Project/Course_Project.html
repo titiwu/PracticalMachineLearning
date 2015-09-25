@@ -119,6 +119,7 @@ which(descrCor &gt; 0.95,arr.ind=T)</code></pre>
 training &lt;- pml_data[inTrain,]
 testing &lt;- pml_data[-inTrain,]</code></pre>
 <p>This leads to 5889 training and 13733 testing datasets.</p>
+<p>With this partition the cross validation is the testing set which is quite large and should therefore give a good estimate for the out of sample error.</p>
 </div>
 </div>
 <div id="algorithm" class="section level2">
@@ -180,6 +181,7 @@ varImpPlot(test_model)</code></pre>
 ## Detection Prevalence   0.2844   0.1935   0.1744   0.1639   0.1838
 ## Balanced Accuracy      0.9796   0.9603   0.9502   0.9752   0.9861</code></pre>
 <p>This algorithm gives an accuracy of about 95% which is already not bad.</p>
+<p>This gives an first estimate for the out of sample error of approximately 5%.</p>
 </div>
 <div id="naive-bayes" class="section level3">
 <h3>Naive Bayes</h3>
@@ -217,6 +219,7 @@ varImpPlot(test_model)</code></pre>
 ## Detection Prevalence   0.2844   0.1935   0.1744   0.1639   0.1838
 ## Balanced Accuracy      0.8056   0.8499   0.7905   0.8110   0.9136</code></pre>
 <p>Even though the data looked gaussian distributed, wich led to the use of this algorithm, the performance is bad, giving only 72 % accuracy. Maybe this is because the data peaks are quite equally centered as seen in the density plot above.</p>
+<p>The out of sample error ist therefore estimated to be 28 percent.</p>
 </div>
 <div id="random-forest" class="section level3">
 <h3>Random forest</h3>
@@ -293,6 +296,144 @@ confusionMatrix(testing$classe,predict(rf_model,testing))</code></pre>
 ## Detection Prevalence   0.2844   0.1935   0.1744   0.1639   0.1838
 ## Balanced Accuracy      0.9919   0.9862   0.9777   0.9944   0.9971</code></pre>
 <p>As it can be seen, the pca preprocessing leads to nearly the same performance.</p>
+<p>For both cases an out of sample error of 2% can be estimated.</p>
+</div>
+</div>
+<div id="cross-validation" class="section level2">
+<h2>Cross validation</h2>
+<p>Repeating the steps (randomly subsampling a data partition and performing training and evaluation) is only done for the best algorithm (random forest without pca).</p>
+<div id="round-2" class="section level3">
+<h3>Round 2</h3>
+<pre class="r"><code>set.seed(234)
+inTrain &lt;- createDataPartition(y=pml_data$classe,
+                              p=0.3, list=FALSE)
+training &lt;- pml_data[inTrain,]
+testing &lt;- pml_data[-inTrain,]</code></pre>
+<pre class="r"><code>rf_model&lt;-train(classe ~ .,data=training,method=&quot;rf&quot;,
+                trControl=trainControl(method=&quot;cv&quot;,number=5),
+                allowParallel=TRUE)</code></pre>
+<pre class="r"><code>confusionMatrix(testing$classe,predict(rf_model,testing))</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 3897    2    7    0    0
+##          B   44 2573   35    0    5
+##          C    0   45 2332   16    2
+##          D    0    3   47 2198    3
+##          E    2    7    7    9 2499
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.983           
+##                  95% CI : (0.9807, 0.9851)
+##     No Information Rate : 0.2871          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9784          
+##  Mcnemar's Test P-Value : NA              
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9883   0.9783   0.9605   0.9888   0.9960
+## Specificity            0.9991   0.9924   0.9944   0.9954   0.9978
+## Pos Pred Value         0.9977   0.9684   0.9737   0.9765   0.9901
+## Neg Pred Value         0.9953   0.9949   0.9915   0.9978   0.9991
+## Prevalence             0.2871   0.1915   0.1768   0.1619   0.1827
+## Detection Rate         0.2838   0.1874   0.1698   0.1601   0.1820
+## Detection Prevalence   0.2844   0.1935   0.1744   0.1639   0.1838
+## Balanced Accuracy      0.9937   0.9854   0.9774   0.9921   0.9969</code></pre>
+</div>
+<div id="round-3" class="section level3">
+<h3>Round 3</h3>
+<pre class="r"><code>set.seed(456)
+inTrain &lt;- createDataPartition(y=pml_data$classe,
+                              p=0.3, list=FALSE)
+training &lt;- pml_data[inTrain,]
+testing &lt;- pml_data[-inTrain,]</code></pre>
+<pre class="r"><code>rf_model&lt;-train(classe ~ .,data=training,method=&quot;rf&quot;,
+                trControl=trainControl(method=&quot;cv&quot;,number=5),
+                allowParallel=TRUE)</code></pre>
+<pre class="r"><code>confusionMatrix(testing$classe,predict(rf_model,testing))</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 3892   12    1    0    1
+##          B   77 2559   20    1    0
+##          C    0   36 2342   17    0
+##          D    0    5   45 2189   12
+##          E    1   12    9   15 2487
+## 
+## Overall Statistics
+##                                          
+##                Accuracy : 0.9808         
+##                  95% CI : (0.9783, 0.983)
+##     No Information Rate : 0.2891         
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16      
+##                                          
+##                   Kappa : 0.9757         
+##  Mcnemar's Test P-Value : NA             
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9804   0.9752   0.9690   0.9851   0.9948
+## Specificity            0.9986   0.9912   0.9953   0.9946   0.9967
+## Pos Pred Value         0.9964   0.9631   0.9779   0.9725   0.9853
+## Neg Pred Value         0.9921   0.9941   0.9934   0.9971   0.9988
+## Prevalence             0.2891   0.1911   0.1760   0.1618   0.1820
+## Detection Rate         0.2834   0.1863   0.1705   0.1594   0.1811
+## Detection Prevalence   0.2844   0.1935   0.1744   0.1639   0.1838
+## Balanced Accuracy      0.9895   0.9832   0.9821   0.9899   0.9958</code></pre>
+</div>
+<div id="round-4" class="section level3">
+<h3>Round 4</h3>
+<pre class="r"><code>set.seed(567)
+inTrain &lt;- createDataPartition(y=pml_data$classe,
+                              p=0.3, list=FALSE)
+training &lt;- pml_data[inTrain,]
+testing &lt;- pml_data[-inTrain,]</code></pre>
+<pre class="r"><code>rf_model&lt;-train(classe ~ .,data=training,method=&quot;rf&quot;,
+                trControl=trainControl(method=&quot;cv&quot;,number=5),
+                allowParallel=TRUE)</code></pre>
+<pre class="r"><code>confusionMatrix(testing$classe,predict(rf_model,testing))</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 3878   17    8    0    3
+##          B   43 2589   17    8    0
+##          C    0   27 2341   21    6
+##          D    0    1   37 2209    4
+##          E    2   13    7   30 2472
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9822          
+##                  95% CI : (0.9799, 0.9844)
+##     No Information Rate : 0.2857          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9775          
+##  Mcnemar's Test P-Value : NA              
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9885   0.9781   0.9714   0.9740   0.9948
+## Specificity            0.9971   0.9939   0.9952   0.9963   0.9954
+## Pos Pred Value         0.9928   0.9744   0.9775   0.9813   0.9794
+## Neg Pred Value         0.9954   0.9948   0.9939   0.9949   0.9988
+## Prevalence             0.2857   0.1927   0.1755   0.1651   0.1810
+## Detection Rate         0.2824   0.1885   0.1705   0.1609   0.1800
+## Detection Prevalence   0.2844   0.1935   0.1744   0.1639   0.1838
+## Balanced Accuracy      0.9928   0.9860   0.9833   0.9852   0.9951</code></pre>
+</div>
+<div id="conclusion" class="section level3">
+<h3>Conclusion</h3>
+<p>Since the outcome is nearly the same, the out of sample error is estimated to be 2%.</p>
 </div>
 </div>
 <div id="applying-to-the-project-test-data-set" class="section level2">
